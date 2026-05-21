@@ -103,9 +103,16 @@ def main():
             # Use first num demos
             demo_indices = demo_indices[:num]
     else:
-        # Fallback to old behavior if success folder doesn't exist
-        print(f"Success folder not found at {success_dir}, falling back to sequential processing")
-        demo_indices = list(range(num))
+        raise FileNotFoundError(
+            f"Success folder not found at {success_dir}. "
+            "Demo collection likely failed before conversion; fix the collection error and rerun collect_demo.sh."
+        )
+
+    if not demo_indices:
+        raise RuntimeError(
+            f"No valid demos with metadata.json found under {success_dir}. "
+            "Refusing to create an empty zarr dataset."
+        )
 
     save_dir = f"data_policy/{task_name}_{len(demo_indices)}.zarr"
     print("ZARR save dir:", save_dir)
