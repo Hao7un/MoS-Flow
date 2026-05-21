@@ -29,7 +29,7 @@ class Attention(nn.Module):
         self.q_norm = nn.LayerNorm(self.head_dim) if qk_norm else nn.Identity()
         self.k_norm = nn.LayerNorm(self.head_dim) if qk_norm else nn.Identity()
         self.proj = nn.Linear(dim, dim)
-        self.rope = RotaryPosEmb(dim, max_seq_len=max_seq_len)
+        self.rope = RotaryPosEmb(self.head_dim, max_seq_len=max_seq_len)
 
     def forward(self, x, mask=None):
         B, S, C = x.shape
@@ -78,7 +78,7 @@ class AdaLNBlock(nn.Module):
             in_features=dim,
             hidden_features=int(dim * mlp_ratio),
             act_layer=approx_gelu,
-            drop=0
+            drop=dropout
         )
 
         self.ada_ln = nn.Sequential(
@@ -95,7 +95,7 @@ class AdaLNBlock(nn.Module):
 
     def forward(self, x, t, c):
         B = x.shape[0]
-        features = self.ada_ln(nn.SiLU()(t+c)).view(B, 6, 1, self.dim).unbind(1)
+        features = self.ada_ln(t+c).view(B, 6, 1, self.dim).unbind(1)
         gamma1, gamma2, scale1, scale2, shift1, shift2 = features
 
         x_norm1 = self.norm1(x)
@@ -159,6 +159,15 @@ class FlowTransformer(nn.Module):
         # Initialize timestep embedding MLP
         nn.init.normal_(self.time_embed[1].weight, std=0.02)
         nn.init.normal_(self.time_embed[3].weight, std=0.02)
+
+        # Restore AdaLN-Zero after the global Linear init above.
+        for block in self.transformer_blocks:
+            nn.init.zeros_(block.ada_ln[-1].weight)
+            nn.init.zeros_(block.ada_ln[-1].bias)
+
+        # Zero-init output projection: model starts by predicting zero velocity.
+        nn.init.zeros_(self.out_proj.weight)
+        nn.init.zeros_(self.out_proj.bias)
 
     def forward(self, x, t, global_cond, local_cond=None):
         if not torch.is_tensor(t):
@@ -229,10 +238,12 @@ class SimpleFlowNet(nn.Module):
         mlp_ratio=4.0,
         dropout=0.0,
         time_embed_dim=256,
+        condition_dim=None,
     ):
         super().__init__()
 
         self.hidden_dim = hidden_dim
+        self.condition_dim = condition_dim
         self.input_proj = nn.Linear(input_dim, hidden_dim)
         self.time_embed = nn.Sequential(
             SinusoidalPosEmb(time_embed_dim),
@@ -240,6 +251,7 @@ class SimpleFlowNet(nn.Module):
             nn.Mish(),
             nn.Linear(time_embed_dim * 4, hidden_dim),
         )
+        self.cond_embed = nn.Linear(condition_dim, hidden_dim) if condition_dim is not None else None
 
         self.layers = nn.ModuleList([
             FlowNetLayer(
@@ -267,9 +279,11 @@ class SimpleFlowNet(nn.Module):
         nn.init.normal_(self.time_embed[1].weight, std=0.02)
         nn.init.normal_(self.time_embed[3].weight, std=0.02)
 
-    def forward(self, x, t):
+    def forward(self, x, t, global_cond=None):
         x = self.input_proj(x)
         t = self.time_embed(t)
+        if global_cond is not None and self.cond_embed is not None:
+            t = t + self.cond_embed(global_cond)
 
         for block in self.layers:
             x = block(x, t)
