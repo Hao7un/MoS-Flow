@@ -14,6 +14,7 @@ class CloseDrawerTask(RLBenchTask):
         objects=[
             ArticulationObjCfg(
                 name="drawer_frame",
+                fix_base_link=True,
                 usd_path="roboverse_data/assets/rlbench/close_drawer/drawer_frame/usd/drawer_frame.usd",
             ),
         ],
@@ -30,6 +31,7 @@ class OpenDrawerTask(RLBenchTask):
         objects=[
             ArticulationObjCfg(
                 name="drawer_frame",
+                fix_base_link=True,
                 usd_path="roboverse_data/assets/rlbench/close_drawer/drawer_frame/usd/drawer_frame.usd",
             ),
         ],
