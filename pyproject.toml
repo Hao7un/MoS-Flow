@@ -53,6 +53,7 @@ learn = [
     "pymunk",
     "robomimic",
     "rsl-rl-lib",
+    "scikit-learn",
     "seaborn",
     "stable-baselines3",
     "tensordict",
