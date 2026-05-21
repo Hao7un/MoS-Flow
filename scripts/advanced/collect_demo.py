@@ -421,7 +421,7 @@ def main():
     else:
         dp_pos = (1.5, 0.0, 1.5)
 
-    camera = PinholeCameraCfg(data_types=["rgb", "depth"], pos=dp_pos, look_at=(0.0, 0.0, 0.0))
+    camera = PinholeCameraCfg(data_types=["rgb"], pos=dp_pos, look_at=(0.0, 0.0, 0.0))
 
     # Lighting setup
     if args.render.mode == "pathtracing":

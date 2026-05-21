@@ -235,7 +235,7 @@ def main():
 
     camera = PinholeCameraCfg(
         name="camera",
-        data_types=["rgb", "depth"],
+        data_types=["rgb"],
         width=256,
         height=256,
         pos=dp_pos,

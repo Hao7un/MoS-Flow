@@ -452,6 +452,10 @@ class DefaultRunner(BaseRunner):
     def evaluate(self, ckpt_path=None):
         args = self.eval_args
 
+        # Enable timeout-guarded close to avoid IsaacSim shutdown hang.
+        os.environ["METASIM_FORCE_EXIT_ON_CLOSE"] = "1"
+        os.environ.setdefault("METASIM_CLOSE_TIMEOUT_SEC", "8")
+
         num_envs: int = args.num_envs
         log.info(f"Using GPU device: {args.gpu_id}")
         task_cls = get_task_class(args.task)
@@ -473,7 +477,7 @@ class DefaultRunner(BaseRunner):
 
         camera = PinholeCameraCfg(
             name="camera0",
-            data_types=["rgb", "depth"],
+            data_types=["rgb"],
             width=256,
             height=256,
             pos=dp_pos,

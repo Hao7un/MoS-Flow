@@ -2,6 +2,10 @@
 # Usage: bash roboverse_learn/il/il_run.sh --task_name_set close_box --policy_name ddpm_dit --dr_level_eval 2 --train_enable False
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
+# Force IsaacSim to exit cleanly after close (avoid shutdown hang)
+export METASIM_FORCE_EXIT_ON_CLOSE=1
+export METASIM_CLOSE_TIMEOUT_SEC=${METASIM_CLOSE_TIMEOUT_SEC:-8}
+
 task_name_set="pick_cube" # Tasks, e.g., close_box, stack_cube, pick_cube
 policy_name="a2a"    # IL policy, opts: ddpm_unet, ddpm_dit, ddim_unet, fm_unet, fm_dit, vita, a2a, a2a_dit, mos_flow, act, score
 sim_set="isaacsim"          # Simulator, e.g., mujoco, isaacsim
