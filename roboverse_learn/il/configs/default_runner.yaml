@@ -26,9 +26,9 @@ shape_meta: &shape_meta
 
 exp_name: "default"
 
-horizon: 8
-n_obs_steps: 3
-n_action_steps: 4
+horizon: 16  # 8 history + 8 future for A2A/MoS action-to-action policies
+n_obs_steps: 8
+n_action_steps: 8
 n_latency_steps: 0
 dataset_obs_steps: ${n_obs_steps}
 past_action_visible: False
@@ -40,16 +40,16 @@ eval_enable: null
 eval_path: null
 
 multi_run:
-  run_dir: ./il_outputs/${policy_name}/${task_name}
+  run_dir: ./il_outputs/${policy_name}/${exp_name}/${task_name}
   wandb_name_base: ${task_name}
 
 hydra:
   job:
     override_dirname: ${name}
   run:
-    dir: ./il_outputs/${policy_name}/${task_name}
+    dir: ./il_outputs/${policy_name}/${exp_name}/${task_name}
   sweep:
-    dir: ./il_outputs/${policy_name}/${task_name}
+    dir: ./il_outputs/${policy_name}/${exp_name}/${task_name}
     subdir: ${hydra.job.num}
 
 logging:
@@ -72,4 +72,4 @@ checkpoint:
     format_str: 'epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
   save_last_ckpt: True
   save_last_snapshot: False
-  save_root_dir: ./il_outputs/${policy_name}/${task_name}
+  save_root_dir: ./il_outputs/${policy_name}/${exp_name}/${task_name}

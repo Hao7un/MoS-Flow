@@ -1,0 +1,99 @@
+# MoS-Flow: Mixture-of-Sources Flow Matching Policy.
+#
+# Active configuration (paper's main method = run "#3" in the ablation table):
+#   - hierarchical_gate=true  → x_0 = α ⊙ noise + (1-α) ⊙ mix(g_src, {V, H})
+#   - per_dim_alpha=true      → α ∈ (0, 1)^D, anisotropic Jacobian regularisation
+#   - active_sources=[vision, history]
+#   - entropy warmup 0.3 → 0.0 over 3000 steps  (init trick, not a learned prior)
+#
+# Ablation overrides (used in benchmark scripts, not changed here):
+#   - active_sources: [history]      → "no vision"  (E6)
+#   - active_sources: [vision]       → "no history" (E5)
+#   - hierarchical_gate: false       → "no α curriculum" (P2)
+#   - per_dim_alpha: false           → "scalar α" (#2)
+#
+# All non-MoS hyperparameters mirror policy_config/a2a.yaml so differences
+# attribute to the mixture-source design, not capacity / schedule.
+
+_target_: roboverse_learn.il.policies.mos_flow.mos_flow_policy.MoSFlowImagePolicy
+
+
+shape_meta: ${shape_meta}
+
+obs_encoder:
+  _target_: roboverse_learn.il.utils.vision.multi_image_obs_encoder.MultiImageObsEncoder
+  shape_meta: ${shape_meta}
+  rgb_model:
+    _target_: roboverse_learn.il.utils.vision.model_getter.get_resnet
+    name: resnet18
+    weights: null
+  resize_shape: null
+  crop_shape: null
+  random_crop: True
+  use_group_norm: True
+  share_rgb_model: False
+  imagenet_norm: True
+
+horizon: ${horizon}
+n_action_steps: ${eval:'${n_action_steps}+${n_latency_steps}'}
+n_obs_steps: ${n_obs_steps}
+
+# --- shared with a2a.yaml (do not modify for ablations) ---
+decode_flow_latents: true
+consistency_weight: 1
+enc_contrastive_weight: 0.0
+flow_contrastive_weight: 0.0
+latent_dim: 512
+history_noise_std: 0.0
+
+flow_matcher:
+  _target_: roboverse_learn.il.utils.flow.flow_matchers.ExactOptimalTransportConditionalFlowMatcher
+  sigma: 0.0
+  num_sampling_steps: 6
+
+flow_net:
+  hidden_dim: 512
+  num_layers: 4
+  mlp_ratio: 4
+  dropout: 0.0
+
+action_ae:
+  enc_recon_weight: 0.5
+  flow_recon_weight: 0.5
+  net:
+    enc_hidden_dim: 512
+    dec_hidden_dim: 512
+    dropout: 0.0
+    num_layers: 4
+
+# --- MoS-specific (paper's main configuration) ---
+# Source candidates for the informative mixture. Stochastic noise is handled
+# separately by the hierarchical alpha path.
+active_sources: [vision, history]
+
+# Hierarchical α gate: x_0 = α ⊙ noise + (1-α) ⊙ mix(g_src, informative).
+hierarchical_gate: true
+# Per-dim α: α has shape (B, latent_dim). Each latent axis picks its own
+# noise ratio, providing anisotropic implicit Jacobian regularisation.
+per_dim_alpha: true
+# Initial α = sigmoid(0) = 0.5 → balanced start.
+alpha_init_logit: 0.0
+
+# --- Gating regularisation ---
+# Source gate (over informative sources V, H).
+gate_hidden_dim: 256
+gate_temperature: 1.0
+gate_dropout: 0.0
+
+# Batch-mean gate usage pulled toward uniform. Small constant.
+load_balance_weight: 0.01
+
+# Entropy regulariser: linearly annealed 0.3 → 0.0 over 3000 steps.
+# Acts as an init trick (escape teacher-forcing collapse basin) — once the
+# gate has bootstrapped both pathways, the constraint is removed and the
+# distribution is data-driven thereafter. Constant entropy_weight is kept
+# for back-compat (used when entropy_warmup_steps <= 0).
+entropy_weight: 0.0
+entropy_weight_start: 0.3
+entropy_weight_end: 0.0
+entropy_warmup_steps: 3000
