@@ -274,6 +274,9 @@ class DefaultRunner(BaseRunner):
                             "epoch": self.epoch,
                             "lr": lr_scheduler.get_last_lr()[0],
                         }
+                        if hasattr(self.model, "_last_metrics"):
+                            for k, v in self.model._last_metrics.items():
+                                step_log[f"train_{k}"] = v
 
                         is_last_batch = batch_idx == (len(train_dataloader) - 1)
                         if not is_last_batch:
@@ -319,7 +322,7 @@ class DefaultRunner(BaseRunner):
                         ) as tepoch:
                             for batch_idx, batch in enumerate(tepoch):
                                 batch = dataset.postprocess(batch, device)
-                                loss = self.model.compute_loss(batch)
+                                loss = policy.compute_loss(batch)
                                 val_losses.append(loss)
                                 if (
                                     cfg.train_config.training_params.max_val_steps
@@ -333,6 +336,70 @@ class DefaultRunner(BaseRunner):
                             # log epoch average validation loss
                             step_log["val_loss"] = val_loss
 
+                enable_latent_viz = cfg.train_config.training_params.get("enable_latent_viz", False)
+                if enable_latent_viz and hasattr(policy, "get_latents_for_visualization"):
+                    try:
+                        from roboverse_learn.il.utils.visualization import plot_all_latent_visualizations
+
+                        with torch.no_grad():
+                            all_history_latents = []
+                            all_future_latents = []
+                            max_samples = 500
+                            first_batch = None
+
+                            for batch_idx, batch in enumerate(val_dataloader):
+                                batch = dataset.postprocess(batch, device)
+                                if first_batch is None:
+                                    first_batch = batch
+                                history_latents, future_latents = policy.get_latents_for_visualization(batch)
+                                all_history_latents.append(history_latents.cpu())
+                                all_future_latents.append(future_latents.cpu())
+
+                                if sum(h.shape[0] for h in all_history_latents) >= max_samples:
+                                    break
+
+                            history_latents = torch.cat(all_history_latents, dim=0)[:max_samples]
+                            future_latents = torch.cat(all_future_latents, dim=0)[:max_samples]
+
+                            trajectories = None
+                            trajectory_targets = None
+                            if hasattr(policy, "get_flow_trajectories") and first_batch is not None:
+                                trajectories, trajectory_targets = policy.get_flow_trajectories(first_batch, n_samples=5)
+
+                            viz_dir = pathlib.Path(self.output_dir) / "latent_viz"
+                            viz_results = plot_all_latent_visualizations(
+                                history_latents=history_latents,
+                                future_latents=future_latents,
+                                epoch=self.epoch + 1,
+                                save_dir=str(viz_dir),
+                                trajectories=trajectories,
+                                trajectory_targets=trajectory_targets,
+                            )
+                            log.info(f"Saved latent visualizations to {viz_dir}")
+
+                            wandb_metrics = {
+                                "latent/avg_tsne_distance": viz_results["avg_tsne_distance"],
+                            }
+                            if "flow_end_to_target_dist" in viz_results:
+                                wandb_metrics["latent/flow_end_to_target_dist"] = viz_results["flow_end_to_target_dist"]
+                            if wandb_run is not None:
+                                wandb_run.log(wandb_metrics, step=self.global_step)
+                    except Exception as e:
+                        log.warning(f"Failed to generate latent visualization: {e}")
+
+                if enable_latent_viz and hasattr(policy, "get_gate_visualizations") and wandb_run is not None:
+                    try:
+                        with torch.no_grad():
+                            gate_batch = None
+                            for batch in val_dataloader:
+                                gate_batch = dataset.postprocess(batch, device)
+                                break
+                            if gate_batch is not None:
+                                gate_figs = policy.get_gate_visualizations(gate_batch)
+                                wandb_run.log(gate_figs, step=self.global_step)
+                    except Exception as e:
+                        log.warning(f"Failed to generate gate visualization: {e}")
+
                 # run diffusion sampling on a training batch
                 if (self.epoch % cfg.train_config.training_params.sample_every) == 0:
                     with torch.no_grad():
@@ -343,6 +410,14 @@ class DefaultRunner(BaseRunner):
 
                         result = policy.predict_action(obs_dict)
                         pred_action = result["action_pred"]
+
+                        pred_len = pred_action.shape[1]
+                        gt_len = gt_action.shape[1]
+                        if pred_len != gt_len:
+                            n_obs_steps = gt_len - pred_len + 1
+                            start_idx = n_obs_steps - 1
+                            gt_action = gt_action[:, start_idx:start_idx + pred_len, :]
+
                         mse = torch.nn.functional.mse_loss(pred_action, gt_action)
                         step_log["train_action_mse_error"] = mse.item()
                         del batch
