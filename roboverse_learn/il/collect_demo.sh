@@ -29,6 +29,10 @@ num_envs=1              # Number of parallel environments
 demo_start_idx=0        # Index of the first demo to collect
 sim_set=isaacsim
 cust_name=test
+
+if [ "${sim_set}" = "mujoco" ]; then
+  export MUJOCO_GL=${MUJOCO_GL:-egl}
+fi
 num_demo_success=100
 
 expert_data_num=100

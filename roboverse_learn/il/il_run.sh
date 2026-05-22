@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 # Usage: bash roboverse_learn/il/il_run.sh --task_name_set close_box --policy_name ddpm_dit --dr_level_eval 2 --train_enable False
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
@@ -7,7 +8,7 @@ export METASIM_FORCE_EXIT_ON_CLOSE=1
 export METASIM_CLOSE_TIMEOUT_SEC=${METASIM_CLOSE_TIMEOUT_SEC:-8}
 
 task_name_set="pick_cube" # Tasks, e.g., close_box, stack_cube, pick_cube
-policy_name="a2a"    # IL policy, opts: ddpm_unet, ddpm_dit, ddim_unet, fm_unet, fm_dit, vita, a2a, a2a_dit, mos_flow, act, score
+policy_name="a2a"    # IL policy, opts: ddpm_unet, ddpm_dit, ddim_unet, fm_unet, fm_dit, vita, a2a, mos_flow, act, score
 sim_set="isaacsim"          # Simulator, e.g., mujoco, isaacsim
 demo_num=100              # Number of demonstrations to collect, train, and eval
 
@@ -183,9 +184,10 @@ eval_config.eval_args.max_step=${eval_max_step} \
 eval_config.eval_args.num_envs=${eval_num_envs} \
 eval_config.eval_args.sim=${sim_set} \
 eval_config.eval_args.level=${dr_level_eval} \
-eval_config.eval_args.randomization_seed=${eval_seed} \
++eval_config.eval_args.randomization_seed=${eval_seed} \
 +eval_config.eval_args.max_demo=50 \
 exp_name=${exp_name:-default} \
+logging.mode=${WANDB_MODE:-offline} \
 train_enable=${train_enable} \
 eval_enable=${eval_enable} \
 eval_path=${eval_path} \
