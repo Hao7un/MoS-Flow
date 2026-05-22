@@ -169,14 +169,19 @@ class DefaultRunner(BaseRunner):
             self.ema_model.set_normalizer(normalizer)
 
         # configure lr scheduler
+        # Match the scheduler horizon to the number of optimizer steps we actually run.
+        steps_per_epoch = len(train_dataloader)
+        if cfg.train_config.training_params.max_train_steps is not None:
+            steps_per_epoch = min(steps_per_epoch, cfg.train_config.training_params.max_train_steps)
+        num_training_steps = (
+            steps_per_epoch * cfg.train_config.training_params.num_epochs
+        ) // cfg.train_config.training_params.gradient_accumulate_every
+        num_training_steps = max(1, num_training_steps)
         lr_scheduler = get_scheduler(
             cfg.train_config.training_params.lr_scheduler,
             optimizer=self.optimizer,
             num_warmup_steps=cfg.train_config.training_params.lr_warmup_steps,
-            num_training_steps=(
-                len(train_dataloader) * cfg.train_config.training_params.num_epochs
-            )
-            // cfg.train_config.training_params.gradient_accumulate_every,
+            num_training_steps=num_training_steps,
             # pytorch assumes stepping LRScheduler every epoch
             # however huggingface diffusers steps it every batch
             last_epoch=self.global_step - 1,
@@ -191,10 +196,14 @@ class DefaultRunner(BaseRunner):
 
         # configure logging
         if cfg.logging.mode == "online":
+            logging_cfg = OmegaConf.to_container(cfg.logging, resolve=True)
+            if "tags" in logging_cfg and logging_cfg["tags"]:
+                logging_cfg["tags"] = [tag[:64] if len(tag) > 64 else tag for tag in logging_cfg["tags"]]
+
             wandb_run = wandb.init(
                 dir=str(self.output_dir),
                 config=OmegaConf.to_container(cfg, resolve=True),
-                **cfg.logging,
+                **logging_cfg,
             )
             wandb.config.update(
                 {
@@ -573,8 +582,10 @@ class DefaultRunner(BaseRunner):
                 "No checkpoint found, please provide a valid checkpoint path."
             )
         args.checkpoint_path = pathlib.Path(checkpoint)
+        dr_seed_tag = "none" if dr_seed is None else str(dr_seed)
+        dr_path = f"randomization_level_{dr_level}/scene_{dr_scene_mode}/seed_{dr_seed_tag}"
         ckpt_name = args.checkpoint_path.name + "_" + time_str
-        ckpt_name = f"{args.task}/{self.policy_name}/{args.robot}/{ckpt_name}"
+        ckpt_name = f"{args.task}/{self.policy_name}/{args.robot}/{dr_path}/{ckpt_name}"
 
         from roboverse_learn.il.runners.default_eval_runner import DefaultEvalRunner
 
@@ -739,10 +750,13 @@ class DefaultRunner(BaseRunner):
     ):
         train = self.cfg.train_enable
         eval = self.cfg.eval_enable
-        if not train:
-            ckpt_path = self.cfg.eval_path
+        # Always prefer the explicit eval_path produced by il_run.sh. This keeps
+        # train+eval and eval-only runs using the same checkpoint selection logic.
+        ckpt_path = self.cfg.eval_path if self.cfg.eval_path is not None else ckpt_path
         if train:
             self.train()
+            if self._saving_thread is not None:
+                self._saving_thread.join()
         if eval:
             self.evaluate(ckpt_path=ckpt_path)
 

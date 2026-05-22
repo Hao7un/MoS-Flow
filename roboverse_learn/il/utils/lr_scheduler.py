@@ -1,10 +1,8 @@
-from diffusers.optimization import (
-    TYPE_TO_SCHEDULER_FUNCTION,
-    Optimizer,
-    Optional,
-    SchedulerType,
-    Union,
-)
+from typing import Optional, Union
+
+from torch.optim import Optimizer
+
+from diffusers.optimization import TYPE_TO_SCHEDULER_FUNCTION, SchedulerType
 
 
 def get_scheduler(
