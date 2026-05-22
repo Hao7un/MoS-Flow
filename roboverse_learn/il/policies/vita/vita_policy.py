@@ -165,6 +165,7 @@ class VITAImagePolicy(BaseImagePolicy):
             metrics['enc_action_recon_loss'] = action_recon_loss.item()
             loss += self.action_ae["enc_recon_weight"] * action_recon_loss
 
+        self._last_metrics = metrics
         return loss
 
     def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -195,8 +196,8 @@ class VITAImagePolicy(BaseImagePolicy):
         # unnormalize prediction
         action_pred = self.normalizer["action"].unnormalize(action_pred)
 
-        # get action
-        start = self.n_action_steps - 1
+        # Extract the chunk starting at the current timestep, matching training alignment.
+        start = self.n_obs_steps - 1
         end = start + self.n_action_steps
         action = action_pred[:, start:end]
 

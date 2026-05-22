@@ -26,8 +26,8 @@ class Args:
     """Low end of the task id range"""
     task_id_range_high: int = 1000
     """High end of the task id range"""
-    subset: str = "pickcube_l0"
-    """Subset your ckpt trained on"""
+    subset: str = ""
+    """Subset your ckpt trained on. Empty means task_l<level>."""
     action_set_steps: int = 1
     """Number of steps to take for each action set"""
     save_video_freq: int = 1
@@ -46,4 +46,6 @@ class Args:
     """Seed for reproducible randomization. If None, uses random seed"""
 
     def __post_init__(self):
+        if not self.subset:
+            self.subset = f"{self.task}_l{self.level}"
         log.info(f"Args: {self}")

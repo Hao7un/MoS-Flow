@@ -184,12 +184,17 @@ class BaseEvalRunner:
         """Returns a single action to be directly executed. For action chunking policies it either uses an previsouly
         predicted action chunk, or if it has exausted all of those actions, it queries the model for a new chunk and returns the first one
         """
+        # Keep observation history continuous even while executing a cached action chunk.
+        # Action-to-action policies use the last n_obs_steps proprio states as the next flow source;
+        # updating only when the cache is empty makes that history sparse and breaks rollout.
+        processed_obs = self.process_obs(obs)
+        self.update_obs(processed_obs)
+
         if len(self.action_cache) > 0:
             curr_action = self.action_cache.pop(0)
         else:
-            processed_obs = self.process_obs(obs)
             action_chunk = self.predict_action(
-                processed_obs
+                None
             )  # shape: (action_chunk_steps, num_envs, action_dim)
             if self.policy_cfg.action_config.temporal_agg:
                 curr_action = self.get_temporal_agg_action(action_chunk)
@@ -338,6 +343,10 @@ class BaseEvalRunner:
             / self.policy_cfg.action_config.action_chunk_steps
             for i in range(self.policy_cfg.action_config.action_chunk_steps)
         ]
+
+    def update_obs(self, current_obs):
+        """Update observation history. Override in subclasses that keep recurrent/chunk history."""
+        pass
 
     def reset(self):
         self.action_cache = []

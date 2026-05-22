@@ -40,11 +40,15 @@ class DefaultEvalRunner(BaseEvalRunner):
             self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.agent_pos.shape[0]
             self.policy_cfg.action_config.action_dim = cfg.shape_meta.action.shape[0]
 
-        self.policy_cfg.action_config.action_chunk_steps = cfg.n_action_steps
+        if hasattr(self.policy, "n_action_steps"):
+            self.policy_cfg.action_config.action_chunk_steps = self.policy.n_action_steps
+        else:
+            self.policy_cfg.action_config.action_chunk_steps = cfg.n_action_steps
         self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.agent_pos.shape[0]
         self.policy_cfg.action_config.action_dim = cfg.shape_meta.action.shape[0]
 
-        self.obs = deque(maxlen=cfg.n_obs_steps + 1)
+        self.n_obs_steps = self.policy.n_obs_steps if hasattr(self.policy, "n_obs_steps") else cfg.n_obs_steps
+        self.obs = deque(maxlen=self.n_obs_steps + 1)
         self.env = None
 
     def _stack_last_n_obs(self, all_obs, n_steps):
@@ -87,7 +91,7 @@ class DefaultEvalRunner(BaseEvalRunner):
         result = dict()
         for key in self.obs[0].keys():
             result[key] = self._stack_last_n_obs(
-                [obs[key] for obs in self.obs], self.yaml_cfg.n_obs_steps
+                [obs[key] for obs in self.obs], self.n_obs_steps
             )
 
         return result

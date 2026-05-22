@@ -230,6 +230,7 @@ class A2AImagePolicy(BaseImagePolicy):
             metrics['enc_action_recon_loss'] = action_recon_loss.item()
             loss += self.action_ae["enc_recon_weight"] * action_recon_loss
 
+        self._last_metrics = metrics
         return loss
 
     def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
